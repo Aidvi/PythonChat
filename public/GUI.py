@@ -29,7 +29,7 @@ class ClientWrapper:
 
         root.configure(background="black")
         LoginFrame(root, self.client_socket)
-        #ChatFrame(root, self.room_list, self.client_socket)
+        # ChatFrame(root, self.room_list, self.client_socket)
 
     def socket_data(self):
         size = 1024
@@ -44,7 +44,7 @@ class ClientWrapper:
 
                 if result is False:
                     self.client_socket.close()
-                    print("Exit test")
+                    print("Exit")
                     self.root.destroy()
                     sys.exit()
 
@@ -199,10 +199,7 @@ class ChatFrame:
         message_field.bind("<Return>", self.send_message)
         message_field.pack(ipady=10)
 
-
-        print("TEST ROOMLIST")
         if self.room_list:
-            print("INSIDE ROOMLIST")
             for k, v in self.room_list.items():
                 self.room_box.insert(END, "Room: " + str(k) + " " + v)
 
@@ -228,7 +225,6 @@ class ChatFrame:
     def join_room(self, event=None):
         request = self.choose_room.get()
         self.choose_room.set("")
-        print(request)
         request_join_room = {
             "type": "join-room",
             "room-id": request

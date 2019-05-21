@@ -29,4 +29,3 @@ class JsonParser:
     def prepare(data):
 
         return bytes(json.dumps(data), "utf-8")
-

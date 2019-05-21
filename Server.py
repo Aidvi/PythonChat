@@ -42,11 +42,9 @@ class Server:
             should_break = False
 
             for json_element in json_data:
-                # print(json_element)
                 final_json_data = json.loads(json_element)
                 result = self.event_switch(final_json_data, client, client_address)
 
-                # print(result)
                 if result is False:
                     quit_program = {
                         "type": "quit"
@@ -86,8 +84,6 @@ class Server:
         current_event = switch[event]
         result = getattr(current_event["class"], current_event["method"])(*current_event["params"])
 
-        # print(result)
-
         if type(result) == dict:
             self.clients[result["id"]] = {
                 "username": result["username"],
@@ -111,8 +107,6 @@ class Server:
                 "message": "True"
             }
             client.sendto(JsonParser.prepare(server_message), client_address)
-
-            print(self.clients)
 
         if result is False:
             server_message = {
