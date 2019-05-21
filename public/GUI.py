@@ -17,12 +17,19 @@ class ClientWrapper:
 
     def __init__(self, root):
         self.root = root
+        self.chat_frame = ChatFrame
         self.server_address = ("localhost", 8080)
         self.client_socket.connect(self.server_address)
         threading.Thread(target=self.socket_data).start()
 
         root.title("Secret Chat")
-        root.geometry("600x600")
+        x = root.winfo_x()
+        y = root.winfo_y()
+        w = root.winfo_width()
+        h = root.winfo_height()
+        root.geometry("+%d+%d" % (x + 800, y + 300))
+
+        root.configure(background="black")
         LoginFrame(root)
         # ChatFrame(root)
 
@@ -46,7 +53,6 @@ class ClientWrapper:
     def client_event_handler(self, json_data):
         event = json_data["type"]
         del json_data["type"]
-
         switch = {
             "quit": {
                 "class": self,
@@ -63,9 +69,14 @@ class ClientWrapper:
                 "method": "room_list",
                 "params": json_data.values()
             },
-            "set-id": {
+            "receive-message": {
+                "class": self.chat_frame,
+                "method": "receive_message",
+                "params": json_data.values()
+            },
+            "login-success": {
                 "class": self,
-                "method": "set_id",
+                "method": "login_success",
                 "params": json_data.values()
             }
         }
@@ -79,12 +90,9 @@ class ClientWrapper:
         # TODO Implement Server message display in GUI view (Tkinter)
         print(message)
 
-    def send_message(self, message):
-        message = {
-            "type": "send-message",
-            "message": message
-        }
-        self.client_socket.send(JsonParser.prepare(message))
+    def login_success(self, status):
+        if status == "True":
+            self.chat_frame = self.chat_frame(self.root)
 
     def room_list(self, data):
 
@@ -98,16 +106,13 @@ class ClientWrapper:
             except (ValueError, TypeError):
                 pass
 
-        #print(final_room_list)
+        # print(final_room_list)
         self.room_list = final_room_list
 
     def close_connection(self):
         print("Connection closed by server")
         return False
 
-    def frame_switch(self, frame_name):
-        if frame_name == "chat":
-            pass
 
 class LoginFrame(ClientWrapper):
     def __init__(self, root):
@@ -116,21 +121,24 @@ class LoginFrame(ClientWrapper):
         self.login_frame.configure(background="black")
 
         ## Label Username
-        Label(self.login_frame, text="Username:", bg="black", fg="white").grid(row=1, column=0, sticky=W)
+        Label(self.login_frame, text="USERNAME:", bg="black", fg="#20C20E").grid(row=1, column=0, sticky=W)
 
         ## Username
-        self.username = Entry(self.login_frame, width=20, bg="white")
+        self.username = Entry(self.login_frame, borderwidth=10, relief=FLAT, width=49, bg="black", fg="#20C20E",
+                              insertbackground="#20C20E", insertwidth=5)
         self.username.grid(row=2, column=0, sticky=W)
 
         ## Label Password
-        Label(self.login_frame, text="Password:", bg="black", fg="white").grid(row=3, column=0, sticky=W)
+        Label(self.login_frame, text="PASSWORD:", bg="black", fg="#20C20E").grid(row=3, column=0, sticky=W)
 
         ## Password
-        self.password = Entry(self.login_frame, width=20, bg="white")
+        self.password = Entry(self.login_frame, show="*", borderwidth=10, relief=FLAT, width=49, bg="black",
+                              fg="#20C20E",
+                              insertbackground="#20C20E", insertwidth=5)
         self.password.grid(row=4, column=0, sticky=W)
 
         ## Button
-        Button(self.login_frame, text="Login", width=6, command=self.login).grid(row=5, column=0, sticky=W)
+        Button(self.login_frame, text="Login", width=44, command=self.login, bg="#20C20E", fg="black").grid(row=5, column=0, sticky=W, pady=15)
 
     def login(self):
         username_text = self.username.get()
@@ -138,21 +146,48 @@ class LoginFrame(ClientWrapper):
         json_credentials = '{ "type":"login", "username":"%s", "password":"%s" }' % (username_text, password_text)
         self.client_socket.send(bytes(json_credentials, "utf-8"))
 
-        self.send_message("TEST SEND MESSAGE FROM CLIENT")
-
         self.username.delete(0, END)
         self.password.delete(0, END)
+
+        self.login_frame.destroy()
 
 
 class ChatFrame(ClientWrapper):
     def __init__(self, root):
         self.chat_frame = Frame(root)
-        self.message_box = Scrollbar(self.chat_frame, wrap=Tk.WORD, width=50, height=25)
-        list = Listbox(self.chat_frame, bg="black", height=60, width=100, yscrollcommand=self.message_box)
+        self.message = StringVar()
+        self.message.set("")
+        scrollbar = Scrollbar(self.chat_frame)
 
-        self.message_box.pack()
-        list.pack()
-        self.chat_frame.pack(side="left", fill="both", expand=True)
+        self.message_box = Listbox(self.chat_frame, bg="black", fg="#20C20E", font=20, height=25, width=55,
+                                   highlightcolor="green", selectbackground="green",
+                                   yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=RIGHT, fill=Y)
+        self.message_box.pack(side=TOP)
+        # self.message_box.pack()
+        self.chat_frame.pack()
+
+        message_field = Entry(self.chat_frame, borderwidth=10, relief=FLAT, width=79, bg="black", fg="#20C20E",
+                              insertbackground="#20C20E", insertwidth=5,
+                              textvariable=self.message)
+
+        message_field.bind("<Return>", self.send_message)
+        message_field.pack(ipady=10)
+        # send_button = Button(self.chat_frame, height=5, width=5, text="Send", command=self.send_message)
+        # send_button.pack(side=RIGHT)
+
+    def send_message(self, event=None):
+        message = self.message.get()
+        self.message.set("")
+        message_to_send = {
+            "type": "send-message",
+            "message": message
+        }
+        self.client_socket.send(JsonParser.prepare(message_to_send))
+
+    def receive_message(self, message):
+        self.message_box.insert(END, message)
 
 
 def main():

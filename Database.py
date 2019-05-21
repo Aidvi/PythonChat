@@ -27,8 +27,12 @@ class ConnectionDatabase:
             print("User not found in database")
             return False
         else:
+            print(result[0][0])
             print("User found")
-            return result[0][0]
+            return {
+                "id": result[0][0],
+                "username": result[0][1]
+            }
 
     def check_user(self, user_id):
         sql_prepare_query = """SELECT * FROM user WHERE id = %s"""

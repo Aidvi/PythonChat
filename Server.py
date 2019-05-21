@@ -29,6 +29,8 @@ class Server:
             print("Waiting for connection...")
             client, client_address = self.serverSocket.accept()
             client.sendall(bytes('{ "type":"server-message", "message":"Welcome to secret chat 0" }', "utf-8"))
+
+            # Client and client_address is the whole client address
             threading.Thread(target=self.client_handler, args=(client, client_address)).start()
 
     def client_handler(self, client, client_address):
@@ -80,12 +82,14 @@ class Server:
         current_event = switch[event]
         result = getattr(current_event["class"], current_event["method"])(*current_event["params"])
 
-        #print(result)
+        # print(result)
 
-        if type(result) == int:
-            self.clients[result] = {
+        if type(result) == dict:
+            self.clients[result["id"]] = {
+                "username": result["username"],
                 "room_id": 1,
-                "connection": client_address
+                "connection": client_address,
+                "client": client
             }
 
             room_list = self.database.room_list()
@@ -99,12 +103,12 @@ class Server:
             client.sendto(JsonParser.prepare(final_room_list), client_address)
 
             server_message = {
-                "type": "server-message",
-                "message": "Login Success"
+                "type": "login-success",
+                "message": "True"
             }
             client.sendto(JsonParser.prepare(server_message), client_address)
 
-            #print(self.clients)
+            print(self.clients)
 
         if result is False:
             server_message = {
@@ -116,8 +120,27 @@ class Server:
 
     def send_message(self, message, client_address):
 
+        current_room = None
+        current_username = None
 
-        print(client_address)
+        message_users = []
+
+        for k, v in self.clients.items():
+            if v["connection"] == client_address:
+                current_room = v["room_id"]
+                current_username = v["username"]
+
+        for k, v in self.clients.items():
+            if v["room_id"] == current_room:
+                message_users.append(v)
+
+        message_to_send = {
+            "type": "receive-message",
+            "message": current_username + ": " + message
+        }
+
+        for connection in message_users:
+            connection["client"].sendto(JsonParser.prepare(message_to_send), connection["connection"])
 
 
 class User:
