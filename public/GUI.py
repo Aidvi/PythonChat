@@ -8,8 +8,7 @@ from services.JsonParser import JsonParser
 
 
 class ClientWrapper:
-    room_list = {}
-
+    # room_list = {}
     try:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as err:
@@ -17,21 +16,20 @@ class ClientWrapper:
 
     def __init__(self, root):
         self.root = root
+        self.room_list = {}
         self.chat_frame = ChatFrame
         self.server_address = ("localhost", 8080)
         self.client_socket.connect(self.server_address)
-        threading.Thread(target=self.socket_data).start()
+        threading.Thread(target=self.socket_data, daemon=True).start()
 
         root.title("Secret Chat")
         x = root.winfo_x()
         y = root.winfo_y()
-        w = root.winfo_width()
-        h = root.winfo_height()
         root.geometry("+%d+%d" % (x + 800, y + 300))
 
         root.configure(background="black")
-        LoginFrame(root)
-        # ChatFrame(root)
+        LoginFrame(root, self.client_socket)
+        #ChatFrame(root, self.room_list, self.client_socket)
 
     def socket_data(self):
         size = 1024
@@ -66,12 +64,17 @@ class ClientWrapper:
             },
             "room-list": {
                 "class": self,
-                "method": "room_list",
+                "method": "room_list_prepare",
                 "params": json_data.values()
             },
             "receive-message": {
                 "class": self.chat_frame,
                 "method": "receive_message",
+                "params": json_data.values()
+            },
+            "join-room-success": {
+                "class": self.chat_frame,
+                "method": "join_room_success",
                 "params": json_data.values()
             },
             "login-success": {
@@ -80,7 +83,6 @@ class ClientWrapper:
                 "params": json_data.values()
             }
         }
-
         current_event = switch[event]
         result = getattr(current_event["class"], current_event["method"])(*current_event["params"])
 
@@ -92,10 +94,9 @@ class ClientWrapper:
 
     def login_success(self, status):
         if status == "True":
-            self.chat_frame = self.chat_frame(self.root)
+            self.chat_frame = self.chat_frame(self.root, self.room_list, self.client_socket)
 
-    def room_list(self, data):
-
+    def room_list_prepare(self, data):
         room_list = json.loads(data)
 
         final_room_list = {}
@@ -114,8 +115,9 @@ class ClientWrapper:
         return False
 
 
-class LoginFrame(ClientWrapper):
-    def __init__(self, root):
+class LoginFrame:
+    def __init__(self, root, client_socket):
+        self.client_socket = client_socket
         self.login_frame = Frame(root)
         self.login_frame.pack(side="top", fill="both", expand=True)  ## MAN SKAL ÅBENBART PACK, LORTE TKINTER
         self.login_frame.configure(background="black")
@@ -138,7 +140,10 @@ class LoginFrame(ClientWrapper):
         self.password.grid(row=4, column=0, sticky=W)
 
         ## Button
-        Button(self.login_frame, text="Login", width=44, command=self.login, bg="#20C20E", fg="black").grid(row=5, column=0, sticky=W, pady=15)
+        Button(self.login_frame, text="Login", width=44, command=self.login, bg="#20C20E", fg="black").grid(row=5,
+                                                                                                            column=0,
+                                                                                                            sticky=W,
+                                                                                                            pady=15)
 
     def login(self):
         username_text = self.username.get()
@@ -152,9 +157,26 @@ class LoginFrame(ClientWrapper):
         self.login_frame.destroy()
 
 
-class ChatFrame(ClientWrapper):
-    def __init__(self, root):
+class ChatFrame:
+    def __init__(self, root, room_list, client_socket):
+        self.client_socket = client_socket
+        self.room_list = room_list
+
         self.chat_frame = Frame(root)
+        self.room_frame = Frame(root)
+
+        self.room_box = Listbox(self.room_frame, bg="black", fg="#20C20E", font=20, height=25, width=15,
+                                highlightcolor="green", selectbackground="green")
+
+        self.room_box.pack(side=LEFT and TOP)
+        self.choose_room = StringVar()
+
+        self.room_field = Entry(self.room_frame, borderwidth=10, relief=FLAT, width=19, bg="black", fg="#20C20E",
+                                insertbackground="#20C20E", insertwidth=5,
+                                textvariable=self.choose_room)
+        self.room_field.bind("<Return>", self.join_room)
+        self.room_field.pack(side=TOP, ipady=10)
+
         self.message = StringVar()
         self.message.set("")
         scrollbar = Scrollbar(self.chat_frame)
@@ -166,6 +188,8 @@ class ChatFrame(ClientWrapper):
         scrollbar.pack(side=RIGHT, fill=Y)
         self.message_box.pack(side=TOP)
         # self.message_box.pack()
+
+        self.room_frame.pack(side=LEFT, fill=Y)
         self.chat_frame.pack()
 
         message_field = Entry(self.chat_frame, borderwidth=10, relief=FLAT, width=79, bg="black", fg="#20C20E",
@@ -174,6 +198,14 @@ class ChatFrame(ClientWrapper):
 
         message_field.bind("<Return>", self.send_message)
         message_field.pack(ipady=10)
+
+
+        print("TEST ROOMLIST")
+        if self.room_list:
+            print("INSIDE ROOMLIST")
+            for k, v in self.room_list.items():
+                self.room_box.insert(END, "Room: " + str(k) + " " + v)
+
         # send_button = Button(self.chat_frame, height=5, width=5, text="Send", command=self.send_message)
         # send_button.pack(side=RIGHT)
 
@@ -188,6 +220,20 @@ class ChatFrame(ClientWrapper):
 
     def receive_message(self, message):
         self.message_box.insert(END, message)
+
+    def join_room_success(self, message):
+        self.message_box.delete(0, END)
+        self.message_box.insert(END, message)
+
+    def join_room(self, event=None):
+        request = self.choose_room.get()
+        self.choose_room.set("")
+        print(request)
+        request_join_room = {
+            "type": "join-room",
+            "room-id": request
+        }
+        self.client_socket.send(JsonParser.prepare(request_join_room))
 
 
 def main():

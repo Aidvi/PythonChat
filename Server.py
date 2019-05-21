@@ -31,7 +31,7 @@ class Server:
             client.sendall(bytes('{ "type":"server-message", "message":"Welcome to secret chat 0" }', "utf-8"))
 
             # Client and client_address is the whole client address
-            threading.Thread(target=self.client_handler, args=(client, client_address)).start()
+            threading.Thread(target=self.client_handler, args=(client, client_address), daemon=True).start()
 
     def client_handler(self, client, client_address):
         size = 1024
@@ -76,7 +76,11 @@ class Server:
                 "params": json_data + [client_address],
             },
             "create-room": {},
-            "join-room": {}
+            "join-room": {
+                "class": self,
+                "method": "join_room",
+                "params": json_data + [client_address] + [client]
+            }
         }
 
         current_event = switch[event]
@@ -118,6 +122,24 @@ class Server:
             client.sendto(JsonParser.prepare(server_message), client_address)
             return False
 
+    def join_room(self, room_id, client_address, client):
+
+        for k, v in self.clients.items():
+            if v["connection"] == client_address:
+                if int(room_id) < len(self.room_list):
+                    v["room_id"] = room_id
+                    response_message = {
+                        "type": "join-room-success",
+                        "message": "ROOM JOINED"
+                    }
+                    client.sendto(JsonParser.prepare(response_message), client_address)
+                else:
+                    response_message = {
+                        "type": "receive-message",
+                        "message": "*********FAILED TO JOIN REQUESTED ROOM*********"
+                    }
+                    client.sendto(JsonParser.prepare(response_message), client_address)
+
     def send_message(self, message, client_address):
 
         current_room = None
@@ -143,23 +165,10 @@ class Server:
             connection["client"].sendto(JsonParser.prepare(message_to_send), connection["connection"])
 
 
-class User:
-    pass
-
-
-class ChatRooms:
-    pass
-
-
 def main():
-    ##database = ConnectionDatabase()
-    ##database.check_login("admin", "admins")
-    ##database.check_user(1)
-    serverSocket = Server("localhost", port=8080)
-    ##serverSocket.event_switch("wqdqdqwd")
-    serverSocket.listener()
+    server_socket = Server("localhost", port=8080)
 
-    ##Server("localhost", port=8080).listener()
+    server_socket.listener()
 
 
 if __name__ == '__main__':
